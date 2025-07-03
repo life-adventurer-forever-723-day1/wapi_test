@@ -3,8 +3,7 @@ from database import Base
 
 class User(Base):
     __tablename__ = "users"
-
     uid = Column(Integer, primary_key=True, index=True)
     name = Column(String(255))
     phone = Column(String(20))
-    chat_id = Column(String(255))  # ✅ Alphanumeric Telegram chat ID
+    chat_id = Column(String(255))
