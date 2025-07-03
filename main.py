@@ -5,13 +5,10 @@ from telegram_notif import send_telegram_message
 import asyncio
 
 app = FastAPI()
-
 seen_users = set()
-
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(poll_for_new_users())
-
 @app.get("/")
 def get_users():
     db = SessionLocal()
