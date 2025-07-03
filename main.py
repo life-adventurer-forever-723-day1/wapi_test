@@ -1,6 +1,6 @@
+# main.py
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-from fastapi.encoders import jsonable_encoder
 from database import SessionLocal, engine
 from models import Base, User
 from telegram_notif import send_telegram_message
@@ -20,22 +20,27 @@ def read_root():
     return {"message": "API is working"}
 
 @app.get("/users")
-def get_all_users():
+def get_users():
     db = SessionLocal()
     users = db.query(User).all()
     db.close()
-    return JSONResponse(content=jsonable_encoder(users))
+    return JSONResponse(content=[{
+        "uid": user.uid,
+        "name": user.name,
+        "phone": user.phone,
+        "chat_id": user.chat_id
+    } for user in users])
 
 async def poll_for_new_users():
     while True:
         try:
             db = SessionLocal()
+            db.expire_all()  # Force fresh data
             users = db.query(User).all()
             for user in users:
                 if user.uid not in seen_users:
                     print(f"✅ New user detected: {user.uid}, sending message…")
-                    response = send_telegram_message(user.chat_id, "Hi")
-                    print(response)
+                    send_telegram_message(user.chat_id, "Hi from Render API")
                     seen_users.add(user.uid)
             db.close()
         except Exception as e:
