@@ -1,44 +1,51 @@
+# main.py
 from fastapi import FastAPI
-from database import SessionLocal
-from models import User
-from telegram_notif import send_message
-import time
-import threading
+from fastapi.responses import JSONResponse
+from database import SessionLocal, engine
+from models import Base, User
+from telegram_utils import send_telegram_message
+import asyncio
 
 app = FastAPI()
-db = SessionLocal()
+Base.metadata.create_all(bind=engine)
 
-# Set to track which user IDs we've already messaged
-seen_user_ids = set()
+seen_users = set()
+
+@app.on_event("startup")
+async def startup_event():
+    # Populate seen_users initially
+    db = SessionLocal()
+    existing_users = db.query(User).all()
+    for user in existing_users:
+        seen_users.add(user.uid)
+    db.close()
+    
+    # Start polling
+    asyncio.create_task(poll_for_new_users())
 
 @app.get("/")
-def root():
-    return {"message": "Telegram Alert API is running"}
+def read_root():
+    return {"message": "API is working"}
 
-@app.get("/users/{user_id}")
-def get_user(user_id: int):
-    user = db.query(User).filter(User.uid == user_id).first()
-    if user:
-        return {
-            "uid": user.uid,
-            "name": user.name,
-            "phone": user.phone,
-            "chat_id": user.chat_id,
-        }
-    return {"error": "User not found"}
+@app.get("/users")
+def get_all_users():
+    db = SessionLocal()
+    users = db.query(User).all()
+    db.close()
+    return users
 
-def poll_new_users():
+async def poll_for_new_users():
     while True:
-        users = db.query(User).all()
-        for user in users:
-            if user.uid not in seen_user_ids:
-                seen_user_ids.add(user.uid)
-                print(f"✅ New user detected: {user.uid}, sending message…")
-                if user.chat_id:
-                    response = send_message(user.chat_id, "Hi!")
-                    print(f"Telegram Response: {response}")
-                else:
-                    print("❌ No chat_id provided")
-        time.sleep(5)
-
-threading.Thread(target=poll_new_users, daemon=True).start()
+        try:
+            db = SessionLocal()
+            users = db.query(User).all()
+            for user in users:
+                if user.uid not in seen_users:
+                    print(f"✅ New user detected: {user.uid}, sending message…")
+                    response = send_telegram_message(user.chat_id, "Hi")
+                    print("Telegram API response:", response)
+                    seen_users.add(user.uid)
+            db.close()
+        except Exception as e:
+            print("Polling error:", str(e))
+        await asyncio.sleep(5)
