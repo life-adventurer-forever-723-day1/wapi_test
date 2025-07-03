@@ -1,6 +1,6 @@
-# main.py
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
 from database import SessionLocal, engine
 from models import Base, User
 from telegram_utils import send_telegram_message
@@ -13,14 +13,6 @@ seen_users = set()
 
 @app.on_event("startup")
 async def startup_event():
-    # Populate seen_users initially
-    db = SessionLocal()
-    existing_users = db.query(User).all()
-    for user in existing_users:
-        seen_users.add(user.uid)
-    db.close()
-    
-    # Start polling
     asyncio.create_task(poll_for_new_users())
 
 @app.get("/")
@@ -32,7 +24,7 @@ def get_all_users():
     db = SessionLocal()
     users = db.query(User).all()
     db.close()
-    return users
+    return JSONResponse(content=jsonable_encoder(users))
 
 async def poll_for_new_users():
     while True:
@@ -43,7 +35,7 @@ async def poll_for_new_users():
                 if user.uid not in seen_users:
                     print(f"✅ New user detected: {user.uid}, sending message…")
                     response = send_telegram_message(user.chat_id, "Hi")
-                    print("Telegram API response:", response)
+                    print(response)
                     seen_users.add(user.uid)
             db.close()
         except Exception as e:
