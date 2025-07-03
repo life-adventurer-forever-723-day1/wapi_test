@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from database import SessionLocal, engine
 from models import Base, User
-from telegram_notif import send_telegram_message
+
 import asyncio
 
 app = FastAPI()
@@ -24,8 +24,6 @@ async def poll_for_new_users():
             for user in users:
                 if user.uid not in seen_users:
                     print(f"✅ New user detected: {user.uid}, sending message…")
-                    response = send_telegram_message(user.chat_id, "Hi")
-                    print(response)
                     seen_users.add(user.uid)
             db.close()
         except Exception as e:
