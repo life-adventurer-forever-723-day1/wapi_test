@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
 from database import SessionLocal, engine
 from models import Base, User
-from telegram_utils import send_telegram_message
+from telegram_notif import send_telegram_message
 import asyncio
 
 app = FastAPI()
