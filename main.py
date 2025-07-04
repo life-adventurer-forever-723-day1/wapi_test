@@ -45,7 +45,7 @@ def fetch_users():
         for u in users
     ]
 
-@app.post("/push")
+@app.post("/")
 def push_payload():
     """
     POST /push  ➜  minimal payload for each user:
