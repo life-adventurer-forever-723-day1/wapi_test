@@ -1,78 +1,63 @@
 # main.py
-import time
-import threading
 from fastapi import FastAPI
 from database import SessionLocal
 from models import User
-from telegram_notif import send_message   # keeps the Telegram greeting logic
 
 app = FastAPI()
-db = SessionLocal()
-
-# Track users we’ve already greeted
-seen_user_ids: set[int] = set()
 
 # ─────────────────────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────────────────────
-def _all_users_json() -> list[dict]:
-    """Return every row from the `users` table as a list of dicts."""
-    users = db.query(User).all()
-    return [
-        {"uid": u.uid, "name": u.name, "phone": u.phone, "chat_id": u.chat_id}
-        for u in users
-    ]
+def _open_db():
+    """Context-manager – always closes the session."""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+def _all_rows():
+    """Return list[User] – every row in the users table."""
+    with next(_open_db()) as db:
+        return db.query(User).all()
 
 # ─────────────────────────────────────────────────────────────
 # Routes
 # ─────────────────────────────────────────────────────────────
 @app.get("/")
-def root():
-    return {"message": "Telegram Alert API is running"}
-
-@app.get("/users")
-def get_users():
-    """Pull – fetch the latest snapshot of all users in the DB."""
-    return {"users": _all_users_json()}
-
-@app.get("/users/{user_id}")
-def get_user(user_id: int):
-    """Pull – fetch a single user by primary key."""
-    user = db.query(User).filter(User.uid == user_id).first()
-    if user:
-        return {
-            "uid": user.uid,
-            "name": user.name,
-            "phone": user.phone,
-            "chat_id": user.chat_id,
+def fetch_users():
+    """
+    GET  /  ➜  full snapshot of the users table.
+    Example response:
+    [
+      { "uid": 1, "name": "Alice", "phone": "919876543210", "chat_id": null },
+      ...
+    ]
+    """
+    users = _all_rows()
+    return [
+        {
+            "uid":   u.uid,
+            "name":  u.name,
+            "phone": u.phone,
+            "chat_id": u.chat_id,
         }
-    return {"error": "User not found"}
+        for u in users
+    ]
 
 @app.post("/push")
-def push_now():
+def push_payload():
     """
-    Push – **no external calls**.
-    Simply returns the JSON payload that would normally be forwarded
-    elsewhere, so you can inspect it in Postman / curl.
+    POST /push  ➜  minimal payload for each user:
+    { "name": <user.name>, "phone": <user.phone>, "message": "Hi" }
+    No request body required.
     """
-    payload = _all_users_json()
-    return {"status": "ok", "payload": payload}
-
-# ─────────────────────────────────────────────────────────────
-# Background poller – greets brand-new users on Telegram
-# ─────────────────────────────────────────────────────────────
-def _poll_new_users():
-    while True:
-        users = db.query(User).all()
-        for user in users:
-            if user.uid not in seen_user_ids:
-                seen_user_ids.add(user.uid)
-                print(f"✅ New user detected: {user.uid}, sending message…")
-                if user.chat_id:
-                    resp = send_message(user.chat_id, "Hi!")
-                    print(f"Telegram response ➜ {resp}")
-                else:
-                    print("❌ No chat_id provided")
-        time.sleep(5)
-
-threading.Thread(target=_poll_new_users, daemon=True).start()
+    users = _all_rows()
+    return [
+        {
+            "name":    u.name,
+            "phone":   u.phone,
+            "message": "Hi",
+        }
+        for u in users
+    ]
